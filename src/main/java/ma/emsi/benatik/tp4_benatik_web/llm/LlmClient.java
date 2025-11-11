@@ -6,45 +6,40 @@ import dev.langchain4j.model.chat.ChatModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.data.message.SystemMessage;
+import dev.langchain4j.rag.RetrievalAugmentor;
 
 import jakarta.enterprise.context.ApplicationScoped;
-
+import jakarta.inject.Inject;
 
 @ApplicationScoped
 public class LlmClient {
 
     private String systemRole;
     private ChatMemory chatMemory;
-    private Assistant assistant;
 
-    /** Constructeur : initialise le modèle Gemini et le service IA */
+    @Inject
+    private RagAvecTavily ragAvecTavily;
+
+    private ChatModel model;
+
+    /** Constructeur : initialise le modèle Gemini */
     public LlmClient() {
-
         String apiKey = System.getenv("GEMINI_KEY");
         if (apiKey == null || apiKey.isBlank()) {
-            throw new IllegalStateException(
-                    "Clé API manquante. Définissez GEMINI_KEY  dans vos variables d'environnement."
-            );
+            throw new IllegalStateException("Clé API GEMINI_KEY manquante !");
         }
 
-        ChatModel model = GoogleAiGeminiChatModel.builder()
+        this.model = GoogleAiGeminiChatModel.builder()
                 .apiKey(apiKey)
                 .modelName("gemini-2.5-flash")
                 .temperature(0.7)
                 .build();
 
         this.chatMemory = MessageWindowChatMemory.withMaxMessages(10);
-
-        this.assistant = AiServices.builder(Assistant.class)
-                .chatModel(model)
-                .chatMemory(chatMemory)
-                .build();
-
     }
 
     /**
-     * Définit le rôle système du LLM et réinitialise la mémoire.
-     * @param role rôle système choisi par l’utilisateur.
+     * Définit le rôle système et réinitialise la mémoire.
      */
     public void setSystemRole(String role) {
         this.systemRole = role;
@@ -55,9 +50,17 @@ public class LlmClient {
     }
 
     /**
-     * Envoie un prompt (question) au LLM et renvoie la réponse.
+     * Envoie un prompt et renvoie une réponse enrichie par le RAG + Tavily.
      */
     public String ask(String prompt) {
+        RetrievalAugmentor augmentor = ragAvecTavily.getAugmentor(); // 🔹 Récupération du RAG
+
+        Assistant assistant = AiServices.builder(Assistant.class)
+                .chatModel(model)
+                .chatMemory(chatMemory)
+                .retrievalAugmentor(augmentor) // 🔹 Activation du RAG
+                .build();
+
         return assistant.chat(prompt);
     }
 
